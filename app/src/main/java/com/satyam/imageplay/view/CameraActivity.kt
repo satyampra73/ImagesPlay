@@ -121,7 +121,21 @@ class CameraActivity : AppCompatActivity() {
         return if (mediaDir != null && mediaDir.exists()) mediaDir else filesDir
     }
 
-
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_PERMISSIONS) {
+            if (allPermissionsGranted()) {
+                startCamera()
+            } else {
+                Toast.makeText(this, "Permissions not granted", Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }
+    }
 
 
 }
