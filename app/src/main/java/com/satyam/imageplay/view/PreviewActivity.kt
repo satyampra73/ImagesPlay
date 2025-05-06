@@ -1,9 +1,13 @@
 package com.satyam.imageplay.view
 
+import android.content.ContentValues
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
@@ -20,6 +24,13 @@ import androidx.lifecycle.ViewModelProvider
 import com.satyam.imageplay.R
 import com.satyam.imageplay.viewmodel.CameraViewModel
 import androidx.core.graphics.createBitmap
+import androidx.lifecycle.lifecycleScope
+import com.satyam.imageplay.viewmodel.CustomProgressBar
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.IOException
 
 class PreviewActivity : AppCompatActivity() {
     private lateinit var rootLayout: FrameLayout
@@ -30,6 +41,8 @@ class PreviewActivity : AppCompatActivity() {
 
     private var emojiView: ImageView? = null
     private var imageUri: Uri? = null
+
+    private val progressBar = CustomProgressBar()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_preview)
@@ -59,20 +72,33 @@ class PreviewActivity : AppCompatActivity() {
             }
         }
 
-//        // Save Image Button
-//        btnSaveImage.setOnClickListener {
-//            val bitmap = getBitmapFromView(rootLayout)
-//            val savedUri = cameraViewModel.saveImageWithEmoji(bitmap, this)
-//            Toast.makeText(this, "Saved at: $savedUri", Toast.LENGTH_SHORT).show()
-//            Log.d("LogImage", "Saved at: $savedUri")
-//        }
-
-
+        // Save Image Button
         btnSaveImage.setOnClickListener {
-            val finalBitmap = mergeCapturedImageWithEmoji()
-            val savedUri = cameraViewModel.saveImageWithEmoji(finalBitmap, this)
-            Toast.makeText(this, "Saved at: $savedUri", Toast.LENGTH_SHORT).show()
+            progressBar.showProgress(this@PreviewActivity)
+
+            lifecycleScope.launch {
+                val bitmap = withContext(Dispatchers.Default) {
+                    getBitmapFromView(rootLayout)
+                }
+
+                val savedUri = withContext(Dispatchers.IO) {
+                    saveBitmapToPublicPictures(this@PreviewActivity, bitmap, "MySavedImages")
+                }
+
+                progressBar.hideProgress()
+                Toast.makeText(this@PreviewActivity, "Saved at: $savedUri", Toast.LENGTH_SHORT).show()
+                Log.d("LogImage", "Saved at: $savedUri")
+            }
+
+
         }
+
+
+//        btnSaveImage.setOnClickListener {
+//            val finalBitmap = mergeCapturedImageWithEmoji()
+//            val savedUri = cameraViewModel.saveImageWithEmoji(finalBitmap, this)
+//            Toast.makeText(this, "Saved at: $savedUri", Toast.LENGTH_SHORT).show()
+//        }
 
     }
 
@@ -105,34 +131,42 @@ class PreviewActivity : AppCompatActivity() {
         }
     }
 
-    private fun mergeCapturedImageWithEmoji(): Bitmap {
-        // 1. Get base bitmap from captured image
-        imageCaptured.isDrawingCacheEnabled = true
-        val capturedBitmap = Bitmap.createBitmap(imageCaptured.drawingCache)
-        imageCaptured.isDrawingCacheEnabled = false
+    fun saveBitmapToPublicPictures(
+        context: Context,
+        bitmap: Bitmap,
+        folderName: String = "MySavedImages"
+    ): Uri? {
+        val filename = "IMG_${System.currentTimeMillis()}.png"
+        val mime = "image/png"
+        val relativeLocation = Environment.DIRECTORY_PICTURES + File.separator + folderName
 
-        // 2. Create a mutable bitmap to draw emoji on top
-        val resultBitmap = createBitmap(capturedBitmap.width, capturedBitmap.height)
-        val canvas = Canvas(resultBitmap)
-        canvas.drawBitmap(capturedBitmap, 0f, 0f, null)
-
-        // 3. Draw the emojiView at its current position
-        emojiView?.let { emoji ->
-            // Get emoji bitmap
-            emoji.isDrawingCacheEnabled = true
-            val emojiBitmap = Bitmap.createBitmap(emoji.drawingCache)
-            emoji.isDrawingCacheEnabled = false
-
-            // Calculate emoji position relative to root layout
-            val location = IntArray(2)
-            emoji.getLocationOnScreen(location)
-            val emojiX = emoji.x
-            val emojiY = emoji.y
-
-            canvas.drawBitmap(emojiBitmap, emojiX, emojiY, null)
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+            put(MediaStore.Images.Media.MIME_TYPE, mime)
+            put(MediaStore.Images.Media.RELATIVE_PATH, relativeLocation)
+            put(MediaStore.Images.Media.IS_PENDING, 1)
         }
 
-        return resultBitmap
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+        uri ?: return null
+
+        try {
+            resolver.openOutputStream(uri)?.use { out ->
+                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
+                    Log.e("SaveImage", "Compression failed")
+                }
+            }
+            values.clear()
+            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+            Log.d("SaveImage", "Saved to $relativeLocation/$filename")
+            return uri
+        } catch (e: IOException) {
+            Log.e("SaveImage", "Failed to save image", e)
+            return null
+        }
     }
+
 
 }
