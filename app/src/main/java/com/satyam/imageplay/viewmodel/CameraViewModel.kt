@@ -10,13 +10,13 @@ import com.satyam.imageplay.model.ImageRepository
 
 class CameraViewModel : ViewModel(){
     private val _capturedImageUri = MutableLiveData<Uri>()
-    val capturedImageUri: LiveData<Uri> = _capturedImageUri
+
 
     fun setCapturedImage(uri: Uri) {
         _capturedImageUri.value = uri
     }
 
-    fun saveImageWithEmoji(bitmap: Bitmap, context: Context): Uri {
-        return ImageRepository.saveImageToStorage(bitmap, context)
+    fun saveImageWithEmoji( context: Context, bitmap: Bitmap,folderName : String): Uri? {
+        return ImageRepository.saveBitmapToPublicPictures( context, bitmap,folderName)
     }
 }

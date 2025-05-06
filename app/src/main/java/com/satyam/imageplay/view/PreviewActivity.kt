@@ -54,11 +54,9 @@ class PreviewActivity : AppCompatActivity() {
 
         cameraViewModel = ViewModelProvider(this)[CameraViewModel::class.java]
 
-        // Load captured image
         imageUri = intent.getStringExtra("image_uri")?.let { Uri.parse(it) }
         imageCaptured.setImageURI(imageUri)
 
-        // Add Emoji Button
         btnAddEmoji.setOnClickListener {
             if (emojiView == null) {
                 emojiView = ImageView(this).apply {
@@ -72,7 +70,6 @@ class PreviewActivity : AppCompatActivity() {
             }
         }
 
-        // Save Image Button
         btnSaveImage.setOnClickListener {
             progressBar.showProgress(this@PreviewActivity)
 
@@ -82,7 +79,7 @@ class PreviewActivity : AppCompatActivity() {
                 }
 
                 val savedUri = withContext(Dispatchers.IO) {
-                    saveBitmapToPublicPictures(this@PreviewActivity, bitmap, "MySavedImages")
+                    cameraViewModel.saveImageWithEmoji(this@PreviewActivity, bitmap, "MySavedImages")
                 }
 
                 progressBar.hideProgress()
@@ -93,16 +90,9 @@ class PreviewActivity : AppCompatActivity() {
 
         }
 
-
-//        btnSaveImage.setOnClickListener {
-//            val finalBitmap = mergeCapturedImageWithEmoji()
-//            val savedUri = cameraViewModel.saveImageWithEmoji(finalBitmap, this)
-//            Toast.makeText(this, "Saved at: $savedUri", Toast.LENGTH_SHORT).show()
-//        }
-
     }
 
-    // Convert layout to Bitmap
+
     private fun getBitmapFromView(view: View): Bitmap {
         val bitmap = createBitmap(view.width, view.height)
         val canvas = Canvas(bitmap)
@@ -111,7 +101,6 @@ class PreviewActivity : AppCompatActivity() {
     }
 
 
-    // Touch Listener for dragging emoji
     inner class DragTouchListener : View.OnTouchListener {
         private var dX = 0f
         private var dY = 0f
@@ -131,42 +120,7 @@ class PreviewActivity : AppCompatActivity() {
         }
     }
 
-    fun saveBitmapToPublicPictures(
-        context: Context,
-        bitmap: Bitmap,
-        folderName: String = "MySavedImages"
-    ): Uri? {
-        val filename = "IMG_${System.currentTimeMillis()}.png"
-        val mime = "image/png"
-        val relativeLocation = Environment.DIRECTORY_PICTURES + File.separator + folderName
 
-        val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, filename)
-            put(MediaStore.Images.Media.MIME_TYPE, mime)
-            put(MediaStore.Images.Media.RELATIVE_PATH, relativeLocation)
-            put(MediaStore.Images.Media.IS_PENDING, 1)
-        }
-
-        val resolver = context.contentResolver
-        val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-        uri ?: return null
-
-        try {
-            resolver.openOutputStream(uri)?.use { out ->
-                if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)) {
-                    Log.e("SaveImage", "Compression failed")
-                }
-            }
-            values.clear()
-            values.put(MediaStore.Images.Media.IS_PENDING, 0)
-            resolver.update(uri, values, null, null)
-            Log.d("SaveImage", "Saved to $relativeLocation/$filename")
-            return uri
-        } catch (e: IOException) {
-            Log.e("SaveImage", "Failed to save image", e)
-            return null
-        }
-    }
 
 
 }
